@@ -1,0 +1,46 @@
+.game-board {
+  display: inline-block;
+  background-color: #0066cc;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.board-row {
+  display: flex;
+}
+
+.board-cell {
+  width: 60px;
+  height: 60px;
+  margin: 5px;
+  background-color: #0066cc;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.board-cell .piece {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background-color: white;
+}
+
+.board-cell.red .piece {
+  background-color: #ff4444;
+}
+
+.board-cell.yellow .piece {
+  background-color: #ffdd44;
+}
+
+.board-cell.empty .piece {
+  background-color: white;
+}
+
+.board-cell:hover {
+  opacity: 0.8;
+}
