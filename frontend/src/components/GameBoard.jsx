@@ -22,8 +22,8 @@ const GameBoard = ({ board, onColumnClick, currentTurn, myPiece, gameStatus }) =
             <div
               key={`${rowIndex}-${colIndex}`}
               className={`board-cell ${getPieceColor(cell)}`}
-              onClick={() => rowIndex === 0 && handleColumnClick(colIndex)}
-              style={{ cursor: rowIndex === 0 && currentTurn === myPiece ? 'pointer' : 'default' }}
+              onClick={() => handleColumnClick(colIndex)}
+              style={{ cursor: currentTurn === myPiece && gameStatus === 'playing' ? 'pointer' : 'default' }}
             >
               <div className="piece"></div>
             </div>
