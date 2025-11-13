@@ -3,8 +3,8 @@ package matchmaking
 import (
     "sync"
     "time"
-    "github.com/AkshatPandey-2004/4-in-a-row/pkg/models"
-    "github.com/AkshatPandey-2004/4-in-a-row/internal/game"
+    "github.com/AkshatPandey-2004/4-IN-A-ROW/pkg/models"
+    "github.com/AkshatPandey-2004/4-IN-A-ROW/internal/game"
 )
 
 type WaitingPlayer struct {

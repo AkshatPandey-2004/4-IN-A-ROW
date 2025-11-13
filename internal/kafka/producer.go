@@ -4,7 +4,7 @@ import (
     "encoding/json"
     "log"
     "github.com/IBM/sarama"
-    "github.com/AkshatPandey-2004/4-in-a-row/pkg/models"
+    "github.com/AkshatPandey-2004/4-IN-A-ROW/pkg/models"
 )
 
 type Producer struct {

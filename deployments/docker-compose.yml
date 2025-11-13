@@ -1,23 +1,6 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: fourinarow
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     environment:
@@ -25,6 +8,8 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
+    networks:
+      - fourinarow-network
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
@@ -39,31 +24,31 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     healthcheck:
-      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 5
+      start_period: 30s
+    networks:
+      - fourinarow-network
 
   backend:
     build:
       context: ..
       dockerfile: deployments/Dockerfile.backend
     depends_on:
-      postgres:
-        condition: service_healthy
       kafka:
         condition: service_healthy
     ports:
       - "8081:8081"
     environment:
       PORT: 8081
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: fourinarow
+      MONGODB_URI: mongodb+srv://Admin:admin@cluster0.wrnmkpn.mongodb.net/fourinarow?retryWrites=true&w=majority&appName=Cluster0
+      MONGODB_DATABASE: fourinarow
       KAFKA_BROKERS: kafka:9092
     restart: unless-stopped
+    networks:
+      - fourinarow-network
 
   frontend:
     build:
@@ -74,6 +59,9 @@ services:
     ports:
       - "80:80"
     restart: unless-stopped
+    networks:
+      - fourinarow-network
 
-volumes:
-  postgres_data:
+networks:
+  fourinarow-network:
+    driver: bridge

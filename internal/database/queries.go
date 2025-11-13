@@ -1,98 +1,183 @@
 package database
 
 import (
-    "database/sql"
-    "github.com/AkshatPandey-2004/4-in-a-row/pkg/models"
+	"context"
+	"time"
+
+	"github.com/AkshatPandey-2004/4-IN-A-ROW/pkg/models"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func (db *DB) CreateOrGetPlayer(username string, playerID string) error {
-    query := `INSERT INTO players (id, username) VALUES ($1, $2) ON CONFLICT (username) DO NOTHING`
-    _, err := db.Exec(query, playerID, username)
-    return err
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	collection := db.Database.Collection("players")
+
+	player := bson.M{
+		"_id":        playerID,
+		"username":   username,
+		"created_at": time.Now(),
+	}
+
+	opts := options.Update().SetUpsert(true)
+	filter := bson.M{"username": username}
+	update := bson.M{"$setOnInsert": player}
+
+	_, err := collection.UpdateOne(ctx, filter, update, opts)
+	return err
 }
 
 func (db *DB) SaveGame(game *models.Game) error {
-    query := `
-        INSERT INTO games (id, player1_id, player2_id, winner_id, is_bot, status, created_at, finished_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    `
-    
-    var player1ID, player2ID, winnerID sql.NullString
-    
-    if game.Player1 != nil {
-        player1ID.String = game.Player1.ID
-        player1ID.Valid = true
-    }
-    
-    if game.Player2 != nil {
-        player2ID.String = game.Player2.ID
-        player2ID.Valid = true
-    }
-    
-    if game.Winner != nil {
-        winnerID.String = game.Winner.ID
-        winnerID.Valid = true
-    }
-    
-    _, err := db.Exec(query, game.ID, player1ID, player2ID, winnerID, 
-        game.IsBot, game.Status, game.CreatedAt, game.FinishedAt)
-    
-    return err
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	collection := db.Database.Collection("games")
+
+	gameDoc := bson.M{
+		"_id":         game.ID,
+		"player1_id":  nil,
+		"player2_id":  nil,
+		"winner_id":   nil,
+		"is_bot":      game.IsBot,
+		"status":      game.Status,
+		"created_at":  game.CreatedAt,
+		"finished_at": game.FinishedAt,
+	}
+
+	if game.Player1 != nil {
+		gameDoc["player1_id"] = game.Player1.ID
+		gameDoc["player1_username"] = game.Player1.Username
+	}
+
+	if game.Player2 != nil {
+		gameDoc["player2_id"] = game.Player2.ID
+		gameDoc["player2_username"] = game.Player2.Username
+	}
+
+	if game.Winner != nil {
+		gameDoc["winner_id"] = game.Winner.ID
+		gameDoc["winner_username"] = game.Winner.Username
+	}
+
+	_, err := collection.InsertOne(ctx, gameDoc)
+	return err
 }
 
 func (db *DB) UpdateGameStats(game *models.Game) error {
-    if game.Winner != nil {
-        // Update winner stats
-        _, err := db.Exec(`
-            INSERT INTO game_stats (username, wins, total_games) VALUES ($1, 1, 1)
-            ON CONFLICT (username) DO UPDATE SET wins = game_stats.wins + 1, total_games = game_stats.total_games + 1
-        `, game.Winner.Username)
-        if err != nil {
-            return err
-        }
-        
-        // Update loser stats
-        loser := game.Player1
-        if game.Winner.ID == game.Player1.ID {
-            loser = game.Player2
-        }
-        
-        if loser != nil {
-            _, err = db.Exec(`
-                INSERT INTO game_stats (username, losses, total_games) VALUES ($1, 1, 1)
-                ON CONFLICT (username) DO UPDATE SET losses = game_stats.losses + 1, total_games = game_stats.total_games + 1
-            `, loser.Username)
-            return err
-        }
-    } else {
-        // Draw - update both players
-        if game.Player1 != nil {
-            db.Exec(`
-                INSERT INTO game_stats (username, draws, total_games) VALUES ($1, 1, 1)
-                ON CONFLICT (username) DO UPDATE SET draws = game_stats.draws + 1, total_games = game_stats.total_games + 1
-            `, game.Player1.Username)
-        }
-        
-        if game.Player2 != nil {
-            db.Exec(`
-                INSERT INTO game_stats (username, draws, total_games) VALUES ($1, 1, 1)
-                ON CONFLICT (username) DO UPDATE SET draws = game_stats.draws + 1, total_games = game_stats.total_games + 1
-            `, game.Player2.Username)
-        }
-    }
-    
-    return nil
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	collection := db.Database.Collection("game_stats")
+
+	if game.Winner != nil {
+		// Update winner stats
+		_, err := collection.UpdateOne(
+			ctx,
+			bson.M{"username": game.Winner.Username},
+			bson.M{
+				"$inc": bson.M{
+					"wins":        1,
+					"total_games": 1,
+				},
+				"$setOnInsert": bson.M{
+					"losses": 0,
+					"draws":  0,
+				},
+			},
+			options.Update().SetUpsert(true),
+		)
+		if err != nil {
+			return err
+		}
+
+		// Update loser stats
+		loser := game.Player1
+		if game.Winner.ID == game.Player1.ID {
+			loser = game.Player2
+		}
+
+		if loser != nil {
+			_, err = collection.UpdateOne(
+				ctx,
+				bson.M{"username": loser.Username},
+				bson.M{
+					"$inc": bson.M{
+						"losses":      1,
+						"total_games": 1,
+					},
+					"$setOnInsert": bson.M{
+						"wins":  0,
+						"draws": 0,
+					},
+				},
+				options.Update().SetUpsert(true),
+			)
+			return err
+		}
+	} else {
+		// Draw - update both players
+		if game.Player1 != nil {
+			collection.UpdateOne(
+				ctx,
+				bson.M{"username": game.Player1.Username},
+				bson.M{
+					"$inc": bson.M{
+						"draws":       1,
+						"total_games": 1,
+					},
+					"$setOnInsert": bson.M{
+						"wins":   0,
+						"losses": 0,
+					},
+				},
+				options.Update().SetUpsert(true),
+			)
+		}
+
+		if game.Player2 != nil {
+			collection.UpdateOne(
+				ctx,
+				bson.M{"username": game.Player2.Username},
+				bson.M{
+					"$inc": bson.M{
+						"draws":       1,
+						"total_games": 1,
+					},
+					"$setOnInsert": bson.M{
+						"wins":   0,
+						"losses": 0,
+					},
+				},
+				options.Update().SetUpsert(true),
+			)
+		}
+	}
+
+	return nil
 }
 
 func (db *DB) GetLeaderboard(limit int) ([]models.LeaderboardEntry, error) {
-    query := `
-        SELECT username, wins, losses, draws, total_games 
-        FROM game_stats 
-        ORDER BY wins DESC, total_games DESC 
-        LIMIT $1
-    `
-    
-    var leaderboard []models.LeaderboardEntry
-    err := db.Select(&leaderboard, query, limit)
-    return leaderboard, err
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	collection := db.Database.Collection("game_stats")
+
+	opts := options.Find().
+		SetSort(bson.D{{Key: "wins", Value: -1}, {Key: "total_games", Value: -1}}).
+		SetLimit(int64(limit))
+
+	cursor, err := collection.Find(ctx, bson.M{}, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var leaderboard []models.LeaderboardEntry
+	if err = cursor.All(ctx, &leaderboard); err != nil {
+		return nil, err
+	}
+
+	return leaderboard, nil
 }

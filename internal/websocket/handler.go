@@ -7,12 +7,12 @@ import (
     "time"
     "github.com/gorilla/websocket"
     "github.com/google/uuid"
-    "github.com/AkshatPandey-2004/4-in-a-row/pkg/models"
-    "github.com/AkshatPandey-2004/4-in-a-row/internal/game"
-    "github.com/AkshatPandey-2004/4-in-a-row/internal/bot"
-    "github.com/AkshatPandey-2004/4-in-a-row/internal/matchmaking"
-    "github.com/AkshatPandey-2004/4-in-a-row/internal/database"
-    "github.com/AkshatPandey-2004/4-in-a-row/internal/kafka"
+    "github.com/AkshatPandey-2004/4-IN-A-ROW/pkg/models"
+    "github.com/AkshatPandey-2004/4-IN-A-ROW/internal/game"
+    "github.com/AkshatPandey-2004/4-IN-A-ROW/internal/bot"
+    "github.com/AkshatPandey-2004/4-IN-A-ROW/internal/matchmaking"
+    "github.com/AkshatPandey-2004/4-IN-A-ROW/internal/database"
+    "github.com/AkshatPandey-2004/4-IN-A-ROW/internal/kafka"
 )
 
 var upgrader = websocket.Upgrader{
@@ -234,13 +234,11 @@ func (h *Handler) handleMakeMove(client *Client, msg map[string]interface{}) {
     // Handle game end
     if result == "win" || result == "draw" {
         h.handleGameEnd(gameInstance, result)
-        
+    } else if gameInstance.IsBot && result == "continue" && gameInstance.CurrentTurn == 2 {
         // Bot's turn if game continues and it's bot game
-        if gameInstance.IsBot && result == "continue" && gameInstance.CurrentTurn == 2 {
-            time.AfterFunc(500*time.Millisecond, func() {
-                h.makeBotMove(gameInstance)
-            })
-        }
+        time.AfterFunc(500*time.Millisecond, func() {
+            h.makeBotMove(gameInstance)
+        })
     }
 }
 

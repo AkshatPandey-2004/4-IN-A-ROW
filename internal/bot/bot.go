@@ -2,8 +2,7 @@ package bot
 
 import (
     "math/rand"
-    "time"
-    "github.com/AkshatPandey-2004/4-in-a-row/internal/game"
+    "github.com/AkshatPandey-2004/4-IN-A-ROW/internal/game"
 )
 
 type Bot struct {
@@ -11,7 +10,7 @@ type Bot struct {
 }
 
 func NewBot(playerNum int) *Bot {
-    rand.Seed(time.Now().UnixNano())
+    // Removed rand.Seed() - Go 1.20+ auto-seeds the random generator
     return &Bot{playerNum: playerNum}
 }
 
