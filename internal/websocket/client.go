@@ -1,108 +1,112 @@
 package websocket
 
 import (
-    "encoding/json"
-    "log"
-    "time"
-    "github.com/gorilla/websocket"
+	"encoding/json"
+	"log"
+	"time"
+	"github.com/gorilla/websocket"
 )
 
 const (
-    writeWait      = 10 * time.Second
-    pongWait       = 60 * time.Second
-    pingPeriod     = (pongWait * 9) / 10
-    maxMessageSize = 512
+	writeWait      = 10 * time.Second
+	pongWait       = 60 * time.Second
+	pingPeriod     = (pongWait * 9) / 10
+	maxMessageSize = 512
 )
 
 type Client struct {
-    id       string
-    hub      *Hub
-    conn     *websocket.Conn
-    send     chan []byte
-    username string
-    gameID   string
+	id       string
+	hub      *Hub
+	conn     *websocket.Conn
+	send     chan []byte
+	username string
+	gameID   string
 }
 
 func NewClient(id, username string, hub *Hub, conn *websocket.Conn) *Client {
-    return &Client{
-        id:       id,
-        hub:      hub,
-        conn:     conn,
-        send:     make(chan []byte, 256),
-        username: username,
-    }
+	return &Client{
+		id:       id,
+		hub:      hub,
+		conn:     conn,
+		send:     make(chan []byte, 256),
+		username: username,
+	}
 }
 
 func (c *Client) readPump(handleMessage func(*Client, []byte)) {
-    defer func() {
-        c.hub.unregister <- c
-        c.conn.Close()
-    }()
+	defer func() {
+		c.hub.unregister <- c
+		c.conn.Close()
+		
+		// Log disconnection for debugging
+		log.Printf("Client disconnected: %s (username: %s)", c.id, c.username)
+	}()
 
-    c.conn.SetReadDeadline(time.Now().Add(pongWait))
-    c.conn.SetPongHandler(func(string) error {
-        c.conn.SetReadDeadline(time.Now().Add(pongWait))
-        return nil
-    })
+	c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.conn.SetPongHandler(func(string) error {
+		c.conn.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
 
-    for {
-        _, message, err := c.conn.ReadMessage()
-        if err != nil {
-            if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-                log.Printf("error: %v", err)
-            }
-            break
-        }
-        
-        handleMessage(c, message)
-    }
+	for {
+		_, message, err := c.conn.ReadMessage()
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("WebSocket error for %s: %v", c.username, err)
+			}
+			break
+		}
+		
+		handleMessage(c, message)
+	}
 }
 
 func (c *Client) writePump() {
-    ticker := time.NewTicker(pingPeriod)
-    defer func() {
-        ticker.Stop()
-        c.conn.Close()
-    }()
+	ticker := time.NewTicker(pingPeriod)
+	defer func() {
+		ticker.Stop()
+		c.conn.Close()
+	}()
 
-    for {
-        select {
-        case message, ok := <-c.send:
-            c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-            if !ok {
-                c.conn.WriteMessage(websocket.CloseMessage, []byte{})
-                return
-            }
+	for {
+		select {
+		case message, ok := <-c.send:
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if !ok {
+				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
 
-            w, err := c.conn.NextWriter(websocket.TextMessage)
-            if err != nil {
-                return
-            }
-            w.Write(message)
+			w, err := c.conn.NextWriter(websocket.TextMessage)
+			if err != nil {
+				return
+			}
+			w.Write(message)
 
-            if err := w.Close(); err != nil {
-                return
-            }
+			if err := w.Close(); err != nil {
+				return
+			}
 
-        case <-ticker.C:
-            c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-            if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-                return
-            }
-        }
-    }
+		case <-ticker.C:
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
+		}
+	}
 }
 
 func (c *Client) SendJSON(v interface{}) error {
-    data, err := json.Marshal(v)
-    if err != nil {
-        return err
-    }
-    
-    select {
-    case c.send <- data:
-    default:
-    }
-    
-    return nil
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	
+	select {
+	case c.send <- data:
+	default:
+		log.Printf("Failed to send message to client %s: channel full", c.username)
+	}
+	
+	return nil
 }

@@ -3,6 +3,7 @@ version: '3.8'
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
+    container_name: fourinarow-zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -13,6 +14,7 @@ services:
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
+    container_name: fourinarow-kafka
     depends_on:
       - zookeeper
     ports:
@@ -23,22 +25,17 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-    healthcheck:
-      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list || exit 1"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
     networks:
       - fourinarow-network
+    restart: unless-stopped
 
   backend:
     build:
       context: ..
       dockerfile: deployments/Dockerfile.backend
+    container_name: fourinarow-backend
     depends_on:
-      kafka:
-        condition: service_healthy
+      - kafka
     ports:
       - "8081:8081"
     environment:
@@ -54,10 +51,11 @@ services:
     build:
       context: ..
       dockerfile: deployments/Dockerfile.frontend
+    container_name: fourinarow-frontend
     depends_on:
       - backend
     ports:
-      - "80:80"
+      - "8082:80"
     restart: unless-stopped
     networks:
       - fourinarow-network
@@ -65,3 +63,4 @@ services:
 networks:
   fourinarow-network:
     driver: bridge
+    name: fourinarow-network
